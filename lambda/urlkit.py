@@ -21,9 +21,7 @@ logger.setLevel(log_level)
 
 # Initialize DynamoDB
 dynamodb = boto3.resource("dynamodb")
-# table = dynamodb.Table(os.environ['URL_TABLE'])
-
-table = dynamodb.Table("UrlkitStack-UrlTable6FBD0DEA-1LJY1XPT19UM9")
+table = dynamodb.Table(os.environ["URL_TABLE"])
 
 CHARSET = string.digits + string.ascii_letters
 
@@ -431,53 +429,47 @@ def redirect_url(event: Dict[str, Any]) -> Dict[str, Any]:
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     Main Lambda handler that routes requests to appropriate handlers
-    
+
     Args:
         event (Dict[str, Any]): Lambda event object
         context (Any): Lambda context object
-        
+
     Returns:
         Dict[str, Any]: API Gateway response object
     """
-    request_id = event.get('requestContext', {}).get('requestId', 'unknown')
-    http_method = event.get('httpMethod')
-    
+    request_id = event.get("requestContext", {}).get("requestId", "unknown")
+    http_method = event.get("httpMethod")
+
     logger.info(
         "Processing request",
         extra={
-            'request_id': request_id,
-            'method': http_method,
-            'path': event.get('path')
-        }
+            "request_id": request_id,
+            "method": http_method,
+            "path": event.get("path"),
+        },
     )
 
     try:
-        if http_method == 'POST':
+        if http_method == "POST":
             return create_short_url(event)
-        elif http_method == 'GET':
+        elif http_method == "GET":
             return redirect_url(event)
         else:
             logger.warning(
                 "Method not allowed",
-                extra={
-                    'request_id': request_id,
-                    'method': http_method
-                }
+                extra={"request_id": request_id, "method": http_method},
             )
-            return create_error_response(
-                405,
-                'Method not allowed',
-                request_id
-            )
-            
+            return create_error_response(405, "Method not allowed", request_id)
+
     except Exception as e:
         logger.error(
             "Unexpected error in handler",
-            extra={
-                'request_id': request_id,
-                'error': str(e)
-            },
-            exc_info=True
+            extra={"request_id": request_id, "error": str(e)},
+            exc_info=True,
         )
-        error_message = str(e) if os.environ.get('ENVIRONMENT') == 'development' else 'Internal server error'
+        error_message = (
+            str(e)
+            if os.environ.get("ENVIRONMENT") == "development"
+            else "Internal server error"
+        )
         return create_error_response(500, error_message, request_id)
