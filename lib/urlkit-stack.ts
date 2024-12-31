@@ -150,7 +150,7 @@ export class UrlkitStack extends cdk.Stack {
       responseHeadersPolicyName: 'URLShortenerSecurityHeaders',
       securityHeadersBehavior: {
         contentSecurityPolicy: {
-          contentSecurityPolicy: `default-src 'self'; connect-src 'self' https://*.execute-api.${this.region}.amazonaws.com; img-src 'self' data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'`,
+          contentSecurityPolicy: "default-src 'self' https://*.urlkit.io; connect-src 'self' https://*.urlkit.io https://*.execute-api.us-east-1.amazonaws.com; img-src 'self' https://*.urlkit.io data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'",
           override: true,
         },
         strictTransportSecurity: {
@@ -336,7 +336,7 @@ export class UrlkitStack extends cdk.Stack {
       actionsEnabled: true,
     }).addAlarmAction(new cw_actions.SnsAction(alarmTopic));
 
-    urlkit_handler.addEnvironment('DOMAIN_PREFIX', `https://${DOMAIN_NAME}/`);
+    urlkit_handler.addEnvironment("DOMAIN_PREFIX", `https://${API_DOMAIN}/`);
 
     // Outputs
     new cdk.CfnOutput(this, 'CloudFrontURL', {

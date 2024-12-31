@@ -1,140 +1,153 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 
-// API Gateway URL - you can also move this to .env
-const API_URL = 'https://ltmz097lv9.execute-api.us-east-1.amazonaws.com/prod';
+const API_URL = 'https://api.urlkit.io';
+
+interface ApiResponse {
+  short_url: string;
+  original_url: string;
+  error?: string;
+}
 
 const URLShortener: React.FC = () => {
-    const [url, setUrl] = useState('');
-    const [expiryDays, setExpiryDays] = useState('365');
-    const [shortUrl, setShortUrl] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [copied, setCopied] = useState(false);
+  const [url, setUrl] = useState('');
+  const [expiryDays, setExpiryDays] = useState('365');
+  //const [shortUrl, setShortUrl] = useState('');
+  const [shortId, setShortId] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const getShortUrl = (id: string) => `https://urlkit.io/${id}`;
+  const getRedirectUrl = (id: string) => `${API_URL}/${id}`;
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        setShortUrl('');
-        setLoading(true);
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+    //setShortUrl('');
+    setShortId('');
+    setLoading(true);
 
-        try {
-            const response = await fetch(`${API_URL}/urls`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    url,
-                    expires_in_days: parseInt(expiryDays),
-                }),
-            });
+    try {
+      const response = await fetch(`${API_URL}/urls`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url,
+          expires_in_days: parseInt(expiryDays),
+        }),
+      });
 
-            const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to shorten URL');
-            }
+      const data: ApiResponse = await response.json();
 
-            // The short_url from the response will already contain the API Gateway domain
-            setShortUrl(data.short_url);
-            
-            // Log success for debugging
-            console.log('URL shortened successfully:', data);
-        } catch (err) {
-            console.error('Error shortening URL:', err);
-            setError(err instanceof Error ? err.message : 'Something went wrong');
-        } finally {
-            setLoading(false);
-        }
-    };
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to shorten URL');
+      }
 
-    const handleCopy = async () => {
-        try {
-            await navigator.clipboard.writeText(shortUrl);
-            setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } catch (err) {
-            setError('Failed to copy to clipboard');
-        }
-    };
+      // Extract and store both full URL and ID
+      const id = data.short_url.split('/').pop() || '';
+      //setShortUrl(data.short_url);
+      setShortId(id);
 
-    return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6">
-                <div className="flex items-center gap-2 mb-4">
-                    <span className="text-2xl text-blue-600">🔗</span>
-                    <h1 className="text-xl font-bold text-gray-900">URL Shortener</h1>
-                </div>
+    } catch (err) {
+      console.error('Error shortening URL:', err);
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(getShortUrl(shortId));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError('Failed to copy to clipboard');
+    }
+  };
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <input
-                        type="url"
-                        placeholder="Enter your long URL (include https://)"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        required
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+  return (
+    <div className="min-h-screen bg-gradient-to-bl from-gray-900 via-black to-gray-800 text-white flex flex-col items-center justify-center p-6 relative">
+      <div className="absolute inset-0 bg-gradient-radial from-purple-900 via-black to-gray-900 opacity-75 animate-gradient" />
 
-                    <input
-                        type="number"
-                        placeholder="Expiry days (default: 365)"
-                        value={expiryDays}
-                        onChange={(e) => setExpiryDays(e.target.value)}
-                        min="1"
-                        max="3650"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
+      <div className="z-10 text-center mb-6">
+        <h1 className="text-5xl font-extrabold text-white mb-2 tracking-wide">
+          Welcome to the URL Shortener
+        </h1>
+      </div>
 
-                    <button
-                        type="submit"
-                        disabled={loading}
-                        className="w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
-                    >
-                        {loading ? '⏳ Shortening...' : '✨ Shorten URL'}
-                    </button>
-                </form>
+      <div className="z-10 w-full max-w-lg bg-black/80 backdrop-blur-lg rounded-2xl p-8 border border-gray-700 shadow-neon">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <input
+            type="url"
+            placeholder="Enter your long URL"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            required
+            className="w-full px-4 py-3 bg-gray-800 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 hover:scale-105 transition-transform"
+          />
 
-                {error && (
-                    <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-lg border border-red-200">
-                        ⚠️ {error}
-                    </div>
-                )}
+          <input
+            type="number"
+            placeholder="Expiry days (default: 365)"
+            value={expiryDays}
+            onChange={(e) => setExpiryDays(e.target.value)}
+            min="1"
+            max="3650"
+            className="w-full px-4 py-3 bg-gray-800 text-gray-200 placeholder-gray-400 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 hover:scale-105 transition-transform"
+          />
 
-                {shortUrl && (
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="flex items-center justify-between gap-2">
-                            <a
-                                href={shortUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 truncate"
-                            >
-                                {shortUrl}
-                            </a>
-                            <button
-                                onClick={handleCopy}
-                                className="p-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
-                                type="button"
-                            >
-                                📋
-                            </button>
-                        </div>
-                        {copied && (
-                            <div className="mt-2 text-sm text-green-600">
-                                ✅ Copied to clipboard!
-                            </div>
-                        )}
-                    </div>
-                )}
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full py-3 font-bold rounded-lg shadow-lg text-white bg-gradient-to-r from-purple-500 to-pink-500 hover:from-pink-500 hover:to-purple-500 hover:shadow-purple focus:outline-none ${
+              loading ? 'opacity-75 cursor-wait' : 'hover:scale-105 transition-transform'
+            }`}
+          >
+            {loading ? '⏳ Shortening...' : '✨ Shorten URL'}
+          </button>
+        </form>
 
-                <div className="mt-4 text-sm text-gray-500 flex justify-between">
-                    <span>⏱️ Valid for {expiryDays} days</span>
-                    <span>{shortUrl ? '🔗 Share your link!' : '✍️ Enter a URL to get started'}</span>
-                </div>
+        {error && (
+          <div className="mt-6 p-4 bg-red-500/50 backdrop-blur-lg text-white rounded-lg border border-red-400">
+            ⚠️ {error}
+          </div>
+        )}
+
+        {shortId && (
+          <div className="mt-6 p-4 bg-gray-800/50 backdrop-blur-lg border border-gray-600 rounded-lg">
+            <div className="flex items-center justify-between gap-2">
+              <a
+                href={getRedirectUrl(shortId)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-400 hover:text-purple-300 truncate"
+              >
+                {getShortUrl(shortId)}
+              </a>
+              <button
+                onClick={handleCopy}
+                className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-transform transform hover:scale-110"
+                type="button"
+              >
+                📋 Copy
+              </button>
             </div>
+            {copied && (
+              <p className="mt-2 text-sm text-green-400">
+                ✅ Copied to clipboard!
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-4 text-sm text-gray-400 text-center">
+          {shortId ? '🔗 Share your link!' : '✍️ Enter a URL to get started'}
         </div>
-    );
+      </div>
+    </div>
+  );
 };
 
 export default URLShortener;
