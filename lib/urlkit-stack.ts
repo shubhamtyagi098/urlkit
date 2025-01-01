@@ -182,16 +182,44 @@ export class UrlkitStack extends cdk.Stack {
     const distribution = new cloudfront.Distribution(this, 'UrlShortenerDistribution', {
       certificate: webCertificate,
       domainNames: [DOMAIN_NAME, WWW_DOMAIN],
+      
+      // Static content behavior
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
-        cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
         cachePolicy: cachePolicy,
         responseHeadersPolicy: responseHeadersPolicy,
         compress: true,
       },
-      defaultRootObject: 'index.html',
+      
+      additionalBehaviors: {
+        '/urls': {  // Changed from /urls/* to just /urls
+          origin: new origins.HttpOrigin(API_DOMAIN),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        },
+        '/index.html': {  // Explicit handling for index.html
+          origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+          cachePolicy: cachePolicy,
+        },
+        '/assets/*': {  // Static assets from S3
+          origin: origins.S3BucketOrigin.withOriginAccessControl(websiteBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+          cachePolicy: cachePolicy,
+        },
+        '/*': {  // All other paths go to API
+          origin: new origins.HttpOrigin(API_DOMAIN),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        }
+      },
+      defaultRootObject: 'index.html',    
       errorResponses: [
         {
           httpStatus: 403,
@@ -336,7 +364,9 @@ export class UrlkitStack extends cdk.Stack {
       actionsEnabled: true,
     }).addAlarmAction(new cw_actions.SnsAction(alarmTopic));
 
-    urlkit_handler.addEnvironment("DOMAIN_PREFIX", `https://${API_DOMAIN}/`);
+    urlkit_handler.addEnvironment("DOMAIN_PREFIX", `https://${DOMAIN_NAME}/`);
+    urlkit_handler.addEnvironment("API_DOMAIN", API_DOMAIN);
+    urlkit_handler.addEnvironment("MAIN_DOMAIN", DOMAIN_NAME);
 
     // Outputs
     new cdk.CfnOutput(this, 'CloudFrontURL', {

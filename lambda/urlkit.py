@@ -25,6 +25,9 @@ table = dynamodb.Table(os.environ["URL_TABLE"])
 
 CHARSET = string.digits + string.ascii_letters
 
+API_DOMAIN = os.environ.get('API_DOMAIN', 'api.urlkit.io')
+MAIN_DOMAIN = os.environ.get('MAIN_DOMAIN', 'urlkit.io')
+
 
 class URLCreationError(Exception):
     """Custom exception for URL creation errors"""
@@ -88,14 +91,19 @@ def generate_short_id(length=7):
     return short_id
 
 
-def create_error_response(
-    status_code: int, message: str, request_id: str
-) -> Dict[str, Any]:
-    """Create standardized error response"""
+def create_error_response(status_code: int, message: str, request_id: str) -> Dict[str, Any]:
     return {
-        "statusCode": status_code,
-        "body": json.dumps({"error": message, "request_id": request_id}),
-        "headers": {"Content-Type": "application/json", "X-Request-ID": request_id},
+        'statusCode': status_code,
+        'headers': {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        },
+        'body': json.dumps({
+            'error': message,
+            'request_id': request_id
+        })
     }
 
 
@@ -146,7 +154,7 @@ def create_url_item(request: URLCreationRequest, short_id: str) -> Dict[str, Any
 def create_success_response(
     short_id: str,
     request: URLCreationRequest,
-    created_at: int,  # Parameter name can stay as is
+    created_at: int,
     expire_at: int,
 ) -> URLResponse:
     """Create standardized success response"""
@@ -161,9 +169,6 @@ def create_success_response(
         "created_at": format_timestamp(created_at),
         "request_id": request.request_id,
     }
-
-
-# from datetime import timezone
 
 
 def create_short_url(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -321,24 +326,29 @@ def redirect_url(event: Dict[str, Any]) -> Dict[str, Any]:
         event (Dict[str, Any]): Lambda event object
 
     Returns:
-        Dict[str, Any]: API Gateway response object with redirection or error
+        Dict[str, Any]: Response object with redirection or error
     """
     request_id = event.get("requestContext", {}).get("requestId", "unknown")
     logger.info("Processing URL redirect request", extra={"request_id": request_id})
 
     try:
-        # Get short_id from path parameters - handle missing pathParameters
-        path_parameters = event.get("pathParameters", {})
-        if not path_parameters:
-            logger.warning("Missing path parameters", extra={"request_id": request_id})
-            return create_error_response(400, "Invalid request", request_id)
+        # Extract short_id based on request source
+        if 'Records' in event:  # CloudFront request
+            cf_request = event['Records'][0]['cf']['request']
+            short_id = cf_request['uri'].strip('/')
+            is_api_gateway = False
+        else:  # API Gateway request
+            path_parameters = event.get("pathParameters", {})
+            short_id = path_parameters.get("shortUrl", "")
+            if not short_id:
+                path = event.get("path", "")
+                short_id = path.strip("/")
+            is_api_gateway = True
 
-        short_id = path_parameters.get("shortUrl")
         if not short_id:
             logger.warning("Missing short URL", extra={"request_id": request_id})
             return create_error_response(400, "Short URL is required", request_id)
 
-        # Rest of your existing code...
         # Query DynamoDB for the URL
         response = table.query(
             KeyConditionExpression="short_url = :short_id",
@@ -356,8 +366,8 @@ def redirect_url(event: Dict[str, Any]) -> Dict[str, Any]:
         item = items[0]
         current_time = int(datetime.now(timezone.utc).timestamp())
 
-        expiration_time = item["expire_at"]
         # Check expiration
+        expiration_time = item["expire_at"]
         if expiration_time < current_time:
             logger.info(
                 "URL has expired",
@@ -395,16 +405,31 @@ def redirect_url(event: Dict[str, Any]) -> Dict[str, Any]:
             },
         )
 
-        return {
-            "statusCode": 301,
-            "headers": {
-                "Location": item["original_url"],
-                "Cache-Control": "no-cache, no-store, must-revalidate",
-                "Pragma": "no-cache",
-                "Expires": "0",
-                "X-Request-ID": request_id,
-            },
-        }
+        # Prepare headers
+        if is_api_gateway:
+            return {
+                "statusCode": 301,
+                "headers": {
+                    "Location": item["original_url"],
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0",
+                    "X-Request-ID": request_id,
+                }
+            }
+        else:
+            # CloudFront response format
+            return {
+                "status": "301",
+                "statusDescription": "Moved Permanently",
+                "headers": {
+                    "location": [{"key": "Location", "value": item["original_url"]}],
+                    "cache-control": [{"key": "Cache-Control", "value": "no-cache, no-store, must-revalidate"}],
+                    "pragma": [{"key": "Pragma", "value": "no-cache"}],
+                    "expires": [{"key": "Expires", "value": "0"}],
+                    "x-request-id": [{"key": "X-Request-ID", "value": request_id}],
+                }
+            }
 
     except ClientError as e:
         logger.error(
@@ -439,27 +464,28 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     request_id = event.get("requestContext", {}).get("requestId", "unknown")
     http_method = event.get("httpMethod")
+    path = event.get("path", "")
 
     logger.info(
         "Processing request",
         extra={
             "request_id": request_id,
             "method": http_method,
-            "path": event.get("path"),
+            "path": path,
         },
     )
 
     try:
-        if http_method == "POST":
+        if http_method == "POST" and path == "/urls":
             return create_short_url(event)
-        elif http_method == "GET":
+        elif http_method == "GET" and path != "/urls":
             return redirect_url(event)
         else:
             logger.warning(
-                "Method not allowed",
-                extra={"request_id": request_id, "method": http_method},
+                "Method not allowed or invalid path",
+                extra={"request_id": request_id, "method": http_method, "path": path},
             )
-            return create_error_response(405, "Method not allowed", request_id)
+            return create_error_response(405, "Method not allowed or invalid path", request_id)
 
     except Exception as e:
         logger.error(

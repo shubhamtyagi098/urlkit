@@ -17,7 +17,7 @@ const URLShortener: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const getShortUrl = (id: string) => `https://urlkit.io/${id}`;
-  const getRedirectUrl = (id: string) => `${API_URL}/${id}`;
+  //const getRedirectUrl = (id: string) => `${API_URL}/${id}`;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -44,7 +44,6 @@ const URLShortener: React.FC = () => {
         throw new Error(data.error || 'Failed to shorten URL');
       }
 
-      // Extract and store both full URL and ID
       const id = data.short_url.split('/').pop() || '';
       //setShortUrl(data.short_url);
       setShortId(id);
@@ -119,7 +118,7 @@ const URLShortener: React.FC = () => {
           <div className="mt-6 p-4 bg-gray-800/50 backdrop-blur-lg border border-gray-600 rounded-lg">
             <div className="flex items-center justify-between gap-2">
               <a
-                href={getRedirectUrl(shortId)}
+                href={getShortUrl(shortId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-purple-400 hover:text-purple-300 truncate"
